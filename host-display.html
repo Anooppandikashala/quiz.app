@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz Host Display</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07080f;
+    --surface: #0e1019;
+    --surface2: #161824;
+    --accent: #7c6af7;
+    --accent2: #f7c26a;
+    --gold: #f7c26a;
+    --green: #3de89e;
+    --red: #f76a6a;
+    --text: #f0f0fa;
+    --muted: rgba(240,240,250,0.45);
+    --border: rgba(255,255,255,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: var(--bg); font-family: 'Nunito', sans-serif; color: var(--text); overflow: hidden; }
+
+  /* ── SCREENS ── */
+  .screen { display: none; position: absolute; inset: 0; }
+  .screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+  /* ── LOBBY ── */
+  #lobby {
+    background: radial-gradient(ellipse at 60% 40%, rgba(124,106,247,0.18) 0%, transparent 70%),
+                radial-gradient(ellipse at 20% 80%, rgba(247,194,106,0.1) 0%, transparent 60%),
+                var(--bg);
+  }
+  .lobby-inner { display: flex; gap: 80px; align-items: center; }
+  .lobby-left h1 { font-family: 'Nunito', sans-serif; font-size: 52px; font-weight: 800; line-height: 1.1; max-width: 460px; }
+  .lobby-left h1 span { color: var(--accent); }
+  .lobby-left p { font-size: 18px; color: var(--muted); margin-top: 16px; }
+  .url-pill { display: inline-block; margin-top: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: 40px; padding: 10px 22px; font-size: 16px; color: var(--accent); font-family: 'Nunito', sans-serif; letter-spacing: 1px; }
+  .qr-wrap { background: white; border-radius: 20px; padding: 18px; box-shadow: 0 0 60px rgba(124,106,247,0.3); }
+  .qr-label { text-align: center; margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+  /* participants strip */
+  .participants-strip { position: absolute; bottom: 36px; left: 0; right: 0; text-align: center; }
+  .participants-strip p { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0 40px; }
+  .badge { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 30px; padding: 6px 16px; font-size: 13px; color: var(--text); animation: popIn 0.35s ease; }
+  @keyframes popIn { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .start-btn { margin-top: 32px; background: var(--accent); color: white; border: none; border-radius: 14px; padding: 16px 48px; font-size: 18px; font-family: 'Nunito', sans-serif; font-weight: 700; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; box-shadow: 0 0 40px rgba(124,106,247,0.5); }
+  .start-btn:hover { transform: scale(1.04); box-shadow: 0 0 60px rgba(124,106,247,0.7); }
+
+  /* ── QUESTION ── */
+  #question-screen {
+    background: radial-gradient(ellipse at 80% 20%, rgba(124,106,247,0.12) 0%, transparent 60%), var(--bg);
+    padding: 48px 64px;
+  }
+  .q-top { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; }
+  .q-badge { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 8px; padding: 8px 20px; font-size: 14px; color: var(--muted); font-family: 'Nunito', sans-serif; }
+  .q-text { font-family: 'Nunito', sans-serif; font-size: clamp(26px, 3.5vw, 46px); font-weight: 700; text-align: center; max-width: 900px; line-height: 1.3; margin-bottom: 48px; }
+  .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 960px; }
+  .opt-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 16px; padding: 22px 28px; font-size: 20px; display: flex; align-items: center; gap: 16px; transition: all 0.3s; }
+  .opt-card.reveal-correct { background: rgba(61,232,158,0.12); border-color: var(--green); }
+  .opt-card.reveal-wrong { background: rgba(247,106,106,0.1); border-color: var(--red); opacity: 0.55; }
+  .opt-letter { font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; background: var(--surface); border-radius: 8px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--muted); }
+  .opt-card.reveal-correct .opt-letter { background: var(--green); color: #07080f; }
+  .first-answer-toast { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(61,232,158,0.15); border: 1px solid var(--green); border-radius: 12px; padding: 14px 32px; font-size: 18px; color: var(--green); display: none; white-space: nowrap; animation: slideUp 0.4s ease; }
+  @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+  /* timer */
+  .timer-wrap { position: relative; width: 80px; height: 80px; }
+  .timer-wrap svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+  .timer-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-size: 26px; font-weight: 800; }
+
+  /* answer count bar */
+  .answer-bar { position: absolute; bottom: 24px; left: 64px; right: 64px; display: flex; align-items: center; gap: 16px; }
+  .answer-bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 10px; overflow: hidden; }
+  .answer-bar-fill { height: 100%; background: var(--accent); border-radius: 10px; transition: width 0.4s; }
+  .answer-count { font-size: 14px; color: var(--muted); white-space: nowrap; }
+
+  /* ── LEADERBOARD ── */
+  #leaderboard-screen { padding: 48px 80px; background: var(--bg); }
+  .lb-header { font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 700; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 36px; }
+  .lb-list { width: 100%; max-width: 860px; display: flex; flex-direction: column; gap: 12px; }
+  .lb-row { display: flex; align-items: center; gap: 20px; background: var(--surface); border: 0.5px solid var(--border); border-radius: 16px; padding: 18px 24px; animation: rowIn 0.4s ease both; }
+  .lb-row:nth-child(1) { animation-delay: 0.05s; border-color: rgba(247,194,106,0.35); }
+  .lb-row:nth-child(2) { animation-delay: 0.1s; border-color: rgba(180,180,200,0.3); }
+  .lb-row:nth-child(3) { animation-delay: 0.15s; border-color: rgba(180,130,80,0.3); }
+  @keyframes rowIn { from { transform: translateX(-30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .lb-rank { font-family: 'Nunito', sans-serif; font-size: 22px; width: 36px; text-align: center; }
+  .lb-avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 16px; color: var(--accent); border: 1px solid var(--border); flex-shrink: 0; }
+  .lb-info { flex: 1; }
+  .lb-name { font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 600; }
+  .lb-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .lb-right { text-align: right; }
+  .lb-pts { font-family: 'Nunito', sans-serif; font-size: 24px; font-weight: 800; color: var(--gold); }
+  .lb-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .lb-progress { position: absolute; bottom: 36px; left: 80px; display: flex; gap: 8px; }
+  .q-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); }
+  .q-dot.done { background: var(--accent); border-color: var(--accent); }
+  .q-dot.current { background: var(--gold); border-color: var(--gold); }
+  .next-q-btn { position: absolute; bottom: 24px; right: 80px; background: var(--accent); color: white; border: none; border-radius: 12px; padding: 14px 36px; font-size: 16px; font-family: 'Nunito', sans-serif; font-weight: 700; cursor: pointer; transition: transform 0.15s; }
+  .next-q-btn:hover { transform: scale(1.04); }
+
+  /* ── WINNER ── */
+  #winner-screen {
+    background: radial-gradient(ellipse at 50% 40%, rgba(247,194,106,0.2) 0%, transparent 65%),
+                radial-gradient(ellipse at 20% 80%, rgba(124,106,247,0.15) 0%, transparent 50%), var(--bg);
+  }
+  .winner-crown { font-size: 48px; color: var(--gold); margin-bottom: 16px; animation: crown-glow 2s ease-in-out infinite; }
+  @keyframes crown-glow { 0%,100% { text-shadow: 0 0 20px rgba(247,194,106,0.4); } 50% { text-shadow: 0 0 50px rgba(247,194,106,0.9); } }
+  .winner-label { font-size: 13px; color: var(--muted); font-family: 'Nunito', sans-serif; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
+  .winner-name-big { font-family: 'Nunito', sans-serif; font-size: clamp(40px, 6vw, 80px); font-weight: 800; color: var(--gold); line-height: 1; text-shadow: 0 0 60px rgba(247,194,106,0.5); }
+  .winner-email { font-size: 18px; color: var(--muted); margin-top: 10px; margin-bottom: 40px; }
+  .winner-stats { display: flex; gap: 48px; }
+  .wstat { text-align: center; background: var(--surface); border: 0.5px solid var(--border); border-radius: 16px; padding: 24px 40px; }
+  .wstat-val { font-family: 'Nunito', sans-serif; font-size: 38px; font-weight: 800; color: var(--text); }
+  .wstat-lbl { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .podium-strip { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; align-items: flex-end; gap: 8px; height: 120px; }
+  .pod { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 16px; width: 160px; border-radius: 12px 12px 0 0; }
+  .pod:nth-child(1) { height: 80px; background: linear-gradient(to top, rgba(180,180,200,0.15), transparent); }
+  .pod:nth-child(2) { height: 110px; background: linear-gradient(to top, rgba(247,194,106,0.2), transparent); }
+  .pod:nth-child(3) { height: 65px; background: linear-gradient(to top, rgba(180,130,80,0.15), transparent); }
+  .pod-name { font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 600; }
+  .pod-pts { font-size: 11px; color: var(--muted); }
+
+  /* ── SETUP OVERLAY ── */
+  #setup-overlay { position: fixed; inset: 0; background: rgba(7,8,15,0.97); z-index: 999; display: flex; align-items: center; justify-content: center; }
+  .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 48px; width: 560px; }
+  .setup-card h2 { font-family: 'Nunito', sans-serif; font-size: 28px; font-weight: 800; margin-bottom: 6px; }
+  .setup-card p { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+  .setup-field { margin-bottom: 18px; }
+  .setup-field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-family: 'Nunito', sans-serif; letter-spacing: 0.5px; }
+  .setup-field input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-size: 15px; color: var(--text); font-family: 'Nunito', sans-serif; outline: none; transition: border-color 0.2s; }
+  .setup-field input:focus { border-color: var(--accent); }
+  .setup-btn { width: 100%; background: var(--accent); color: white; border: none; border-radius: 12px; padding: 15px; font-size: 17px; font-family: 'Nunito', sans-serif; font-weight: 700; cursor: pointer; margin-top: 8px; }
+  .demo-btn { width: 100%; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 14px; font-family: 'Nunito', sans-serif; cursor: pointer; margin-top: 10px; }
+  .demo-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .pw-wrap { position: relative; }
+  .pw-wrap input { padding-right: 44px; }
+  .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: rgba(240,240,250,0.45); padding: 4px; line-height: 1; font-size: 18px; }
+  .pw-toggle:hover { color: #f0f0fa; }
+</style>
+</head>
+<body>
+
+<!-- SETUP OVERLAY -->
+<div id="setup-overlay">
+  <div class="setup-card">
+    <h2>Quiz Host Setup</h2>
+    <p>Enter your Firebase config to connect real-time data, or run in demo mode.</p>
+    <div class="setup-field">
+      <label>FIREBASE API KEY</label>
+      <div class="pw-wrap" style="position:relative;">
+        <input id="fb-apikey" type="password" placeholder="Your Firebase API key" autocomplete="off" />
+        <button type="button" class="pw-toggle" onclick="togglePw('fb-apikey',this)" title="Show/hide" aria-label="Show/hide"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </div>
+    </div>
+    <div class="setup-field">
+      <label>FIREBASE PROJECT ID</label>
+      <div class="pw-wrap" style="position:relative;">
+        <input id="fb-project" type="password" placeholder="your-project-id" autocomplete="off" />
+        <button type="button" class="pw-toggle" onclick="togglePw('fb-project',this)" title="Show/hide" aria-label="Show/hide"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </div>
+    </div>
+<div class="setup-field">
+      <label>QUIZ JOIN URL (shown in QR code)</label>
+      <input id="quiz-url" placeholder="https://jyothymukeshkumar.github.io/Quiz-attendee-phone/" value="https://jyothymukeshkumar.github.io/Quiz-attendee-phone/" />
+    </div>
+    <div class="setup-field">
+      <label>QUIZ ROOM CODE</label>
+      <input id="room-code" placeholder="ROOM123" value="ROOM001" />
+    </div>
+    <button class="setup-btn" onclick="connectFirebase()">Connect & Start</button>
+    <button class="demo-btn" onclick="startDemo()">▶ Run in Demo Mode (no Firebase needed)</button>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby" class="screen active">
+  <div class="lobby-inner">
+    <div class="lobby-left">
+      <h1>Join the <span>Live Quiz!</span></h1>
+      <p>Scan the QR code with your phone camera</p>
+      <div class="url-pill" id="display-url">quiz.yourevent.com/join</div>
+      <div class="url-pill" style="color:var(--gold);margin-top:10px;">Room: <span id="display-room">ROOM001</span></div>
+      <button class="start-btn" style="margin-top:28px;" onclick="startQuiz()">▶ Start Quiz</button>
+    </div>
+    <div>
+      <div class="qr-wrap">
+        <canvas id="qr-canvas" width="200" height="200"></canvas>
+      </div>
+      <div class="qr-label">Point camera here to join</div>
+    </div>
+  </div>
+  <div class="participants-strip">
+    <p id="join-count">Waiting for participants...</p>
+    <div class="badges" id="badges"></div>
+  </div>
+</div>
+
+<!-- QUESTION SCREEN -->
+<div id="question-screen" class="screen">
+  <div class="q-top">
+    <div class="q-badge" id="q-badge">Question 1 / 5</div>
+    <div class="timer-wrap">
+      <svg width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"/>
+        <circle id="timer-arc" cx="40" cy="40" r="34" fill="none" stroke="#7c6af7" stroke-width="7"
+          stroke-dasharray="213.6" stroke-dashoffset="0" stroke-linecap="round"/>
+      </svg>
+      <div class="timer-center" id="timer-val">20</div>
+    </div>
+    <div class="q-badge" id="answer-counter">0 answered</div>
+  </div>
+  <div class="q-text" id="q-text"></div>
+  <div class="options-grid" id="options-grid"></div>
+  <div class="first-answer-toast" id="first-toast"></div>
+  <div class="answer-bar">
+    <span class="answer-count" id="ans-label">0 / 0 answered</span>
+    <div class="answer-bar-track"><div class="answer-bar-fill" id="ans-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboard-screen" class="screen">
+  <div class="lb-header" id="lb-header">Leaderboard — After Q1</div>
+  <div class="lb-list" id="lb-list"></div>
+  <div class="lb-progress" id="lb-progress"></div>
+  <button class="next-q-btn" id="next-q-btn" onclick="nextAction()">Next Question →</button>
+</div>
+
+<!-- WINNER -->
+<div id="winner-screen" class="screen">
+  <div class="winner-crown">★</div>
+  <div class="winner-label">And the winner is</div>
+  <div class="winner-name-big" id="w-name">—</div>
+  <div class="winner-email" id="w-email">—</div>
+  <div class="winner-stats">
+    <div class="wstat"><div class="wstat-val" id="w-correct">—</div><div class="wstat-lbl">Correct Answers</div></div>
+    <div class="wstat"><div class="wstat-val" id="w-avg">—</div><div class="wstat-lbl">Avg Speed</div></div>
+    <div class="wstat"><div class="wstat-val" id="w-pts">—</div><div class="wstat-lbl">Total Points</div></div>
+  </div>
+  <div class="podium-strip" id="podium"></div>
+</div>
+
+  <script src="js/host-display.js"></script>
+</body>
+</html>
