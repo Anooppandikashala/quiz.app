@@ -91,14 +91,14 @@ These rules allow public room reads and broad room writes so the static GitHub P
 After GitHub publishes the site, open:
 
 ```text
-https://YOUR_USERNAME.github.io/YOUR_REPOSITORY_NAME/
+https://anooppandikashala.github.io/quiz.app/
 ```
 
 Main pages:
 
-- Attendee page: `/index.html`
-- Admin panel: `/admin-panel.html`
-- Host display: `/host-display.html`
+- Attendee page: `https://anooppandikashala.github.io/quiz.app/index.html`
+- Admin panel: `https://anooppandikashala.github.io/quiz.app/admin-panel.html`
+- Host display: `https://anooppandikashala.github.io/quiz.app/host-display.html`
 
 If you use QR links, make sure the base join URL points to your GitHub Pages URL.
 
