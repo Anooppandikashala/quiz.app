@@ -36,13 +36,48 @@ You can use demo mode without Firebase, or connect a Firebase Realtime Database 
 ## Firebase Setup
 
 1. Create a Firebase project.
-2. Enable Realtime Database.
-3. Copy your Firebase API key and project ID.
-4. Open `admin-panel.html` or `host-display.html`.
-5. Enter the Firebase values and room code.
-6. Share the generated join link or QR code with attendees.
+2. Open **Build > Realtime Database**.
+3. Click **Create Database** and choose a database location.
+4. Start the database, then open the **Rules** tab.
+5. Replace the default rules with the rules below and publish them.
+6. Copy your Firebase API key and project ID from **Project settings**.
+7. Open `admin-panel.html` or `host-display.html`.
+8. Enter the Firebase values and room code.
+9. Share the generated join link or QR code with attendees.
 
-Do not commit private credentials. Keep local secrets out of the repository.
+```json
+{
+  "rules": {
+    "rooms": {
+      ".read": true,
+      "$roomCode": {
+        ".read": true,
+        ".write": true,
+        "participants": {
+          "$uid": {
+            ".write": true
+          }
+        },
+        "answers": {
+          "$qKey": {
+            "$uid": {
+              ".write": "!data.exists()"
+            }
+          }
+        },
+        "status": { ".write": true },
+        "currentQuestion": { ".write": true },
+        "revealAnswer": { ".write": true },
+        "winner": { ".write": true },
+        "questions": { ".write": true },
+        "startedAt": { ".write": true }
+      }
+    }
+  }
+}
+```
+
+These rules allow public room reads and broad room writes so the static GitHub Pages app can run without a backend. Use them for controlled quiz sessions, and tighten or disable writes after the event. Do not commit private credentials. Keep local secrets out of the repository.
 
 ## Host on GitHub Pages
 
